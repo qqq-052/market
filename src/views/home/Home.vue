@@ -1,36 +1,50 @@
 <template>
-  <div id="home">
+  <div id="home" class="wrapper">
     <nav-bar class="home-nav"><div slot="center">购物街</div></nav-bar>
-    <home-swiper :banners="banners" />
-    <home-recommend-view :recommends="recommends"/>
-    <fashion/>
-    <tab-control class="tab-control" :titles="['流行','新款','精选']"/>
-    <goods-list :goods="goods['pop'].list"/>
-<!--    <router-view/>-->
-
+    <scroll class="content" ref="scroll" :probe-type="3"
+            @scroll="contentScroll"
+            :pull-up-load="true"
+            @pullingUp="loadMore">
+      <home-swiper :banners="banners" />
+      <home-recommend-view :recommends="recommends"/>
+      <fashion/>
+      <tab-control class="tab-control"
+                   :titles="['流行','新款','精选']"
+                   @tabClick="tabClick"
+                   ref="tabControl" />
+      <goods-list :goods="showGoods"/>
+    </scroll>
+    <back-top @click.native="backClick" v-show="isShowBackTop"/>
   </div>
 </template>
 
 <script>
-  import NavBar from "../../components/common/navbar/NavBar";
   import HomeSwiper from "./childComps/HomeSwiper";
   import HomeRecommendView from "./childComps/HomeRecommendView";
   import Fashion from "./childComps/Fashion";
+
+  import NavBar from "../../components/common/navbar/NavBar";
   import TabControl from "../../components/content/tabControl/TabControl";
   import GoodsList from "components/content/goods/GoodsList";
+  import Scroll from "../../components/common/scroll/Scroll";
+  import BackTop from "../../components/content/backTop/BackTop";
 
   import {getMultidata, getHomeGoods,} from "../../network/home";
+  import {debounce} from "components/common/utils";
 
 
   export default {
     name: "Home",
     components:{
-      NavBar,
       HomeSwiper,
       HomeRecommendView,
       Fashion,
+
+      NavBar,
       TabControl,
-      GoodsList
+      GoodsList,
+      Scroll,
+      BackTop
     },
     data(){
       return {
@@ -40,54 +54,135 @@
             'pop': {page: 0, list: []},
             'new': {page: 0, list: []},
             'sell': {page: 0, list: []}
-        }
+        },
+        currentType: 'pop',
+        isShowBackTop: false,
+        tabOffsetTop: 0,
+        isTabFixed: false,
+        saveY: 0
       }
-
+    },
+    computed: {
+      showGoods() {
+          return this.goods[this.currentType].list
+      }
     },
     created() {
       //1.请求多个数据
-      this.getMultidata()
-        //2.请求商品数据
-      this.getHomeGoods('pop')
-      this.getHomeGoods('new')
-      this.getHomeGoods('sell')
+      this.getMultidata();
+      //2.请求商品数据
+      this.getHomeGoods('pop');
+      this.getHomeGoods('new');
+      this.getHomeGoods('sell');
     },
-      methods: {
-          getMultidata() {
-              getMultidata().then(res => {
-                  this.banners = res.data.banner.list
-                  this.recommends = res.data.recommend.list
-              })
-          },
-          getHomeGoods(type) {
-              const page = this.goods[type].page + 1
-              getHomeGoods(type, page).then(res => {
-                console.log(res)
-                  this.goods[type].list.push(...res.data.list)
-                  this.goods[type].page +=1
-              })
-          }
+    mounted() {
+      //1.图片加载完成的事件监听，监听item中图片加载完成
+      const refresh = debounce(this.$refs.scroll.refresh,200)//此处定义的是一个函数，因为debounce的返回值是函数
+      this.$bus.$on('itemImgLoad', () => {
+        // this.$refs.scroll && this.$refs.scroll.refresh()
+        //重构后
+        refresh()//调用的是上上行定义的refresh
+      })
 
+
+      //2.获取tabControl的offsetTop
+      //所有的组件都有一个属性$el,用于获取组件中的元素
+      // this.tabOffsetTop = this.$refs.tabControl.$el.offsetTop
+    },
+    methods: {
+      /**
+       * 网络请求相关的方法
+       */
+      getMultidata() {
+        getMultidata().then(res => {
+          this.banners = res.data.banner.list
+          this.recommends = res.data.recommend.list
+        })
+      },
+      getHomeGoods(type) {
+        const page = this.goods[type].page + 1
+        getHomeGoods(type, page).then(res => {
+          // console.log(res)
+          this.goods[type].list.push(...res.data.list)
+          this.goods[type].page +=1
+          //完成上拉加载更多
+          this.$refs.scroll.finishPullUp()
+        })
+      },
+
+
+      /**
+       * 事件监听相关的方法
+       */
+      tabClick(index) {
+        switch(index) {
+          case 0:
+            this.currentType = 'pop'
+            break
+          case 1:
+            this.currentType = 'new'
+            break
+          case 2:
+            this.currentType = 'sell'
+            break
+        }
+      },
+      backClick() {
+        this.$refs.scroll.scrollTo(0,0,500)//scroll.scrollTo指的是组件scroll中的scrollTo方法
+      },
+      contentScroll(position) {
+        //1.判断BackTop是否显示
+        this.isShowBackTop = (-position.y) > 1000
+        //2.决定tabControl是否吸顶（position:fixed）
+        this.inTabFixed= (-position.y) > this.tabOffsetTop
+      },
+      loadMore() {
+        this.getHomeGoods(this.currentType)
       }
+    },
+    // activated() {
+    //   this.$refs.scroll.scrollTo(1, this.saveY, 0)
+    //   this.$refs.scroll.refresh()
+    // },
+    // deactivated() {
+    //   this.saveY = this.$refs.scroll.getScrollY()
+    //   console.log(this.saveY)
+    // },
+
   };
 </script>
 <style scoped>
   #home{
-    margin-top: 44px;
-    height: 1000px;
+    padding-top: 44px;
+    height: 100vh;
+    position: relative;
   }
   .home-nav{
     background-color: var(--color-text);
-    color: white;
-
+    color: #fff;
     position: fixed;
     left: 0;
     right: 0;
     top: 0;
     z-index: 9;
   }
-  .tab-control{
-    position: sticky;
+  .fixed {
+    position: fixed;
+    left: 0;
+    right: 0;
     top: 44px;
+  }
+  /*.tab-control{*/
+  /*  position: sticky;*/
+  /*  top: 44px;*/
+  /*  z-index: 9;*/
+  /*}*/
+  .content {
+    overflow: hidden;
+    position: absolute;
+    top: 44px;
+    bottom: 49px;
+    left: 0;
+    right: 0;
   }
 </style>

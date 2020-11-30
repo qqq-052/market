@@ -1,5 +1,5 @@
 <template>
-    <div id="goods">
+    <div class="goods">
        <goods-list-item v-for="(item,key) in goods" :key="key" :goodsItem="item"/>
     </div>
    </template>
@@ -24,5 +24,11 @@
 </script>
 
 <style scoped>
-
+    .goods{
+        display: flex;
+        flex-wrap: wrap;
+        /*justify-content: space-evenly;*/
+        justify-content: space-around;
+        padding: 2px;
+    }
 </style>
